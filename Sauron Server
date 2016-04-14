@@ -1,0 +1,184 @@
+# -*- coding: utf-8 -*-
+
+import requests
+import telegram
+from time import sleep
+from datetime import datetime
+from requests.exceptions import ConnectionError
+
+
+print(u"============ 감시자 서버 시작 ============")
+
+
+############### telegram inital ###################
+token = '131782535:AAE-y3pezlHVkjn-5uNhPdpTi6gsD3AJuZc'
+#my
+#chat_id
+idnum = 139652030
+
+bot = telegram.Bot(token=token)
+
+#print(bot.getMe())
+updates = bot.getUpdates()
+#print( [u.message.text for u in updates])
+#chat_id = bot.getUpdates()[-1].message.chat_id
+#채팅 아이디 위에처럼 구하면 되지만 24시간 마다 초기화 되어서 말 치지 않은이상 못구함
+#그래서 밑에처럼 하드 코딩
+chat_id = 139652030
+
+#bot.sendMessage(chat_id=chat_id, text="재웅 접속")
+#print(chat_id)
+
+
+################### lol ############################
+apikey = '663999c6-f593-4320-adce-5be74fa11c86'
+lolurl = 'https://kr.api.pvp.net/api/lol/kr/v1.4/summoner/by-name/구로지배자?api_key=' + apikey
+lolurlbase = 'https://kr.api.pvp.net/api/lol/kr/v1.4'
+
+#ID 1
+User1 = "ID 1"
+key1 = #ID 1' key value
+#ID 2
+User2 = "ID 2"
+key2 = #ID 2' key value
+#ID 3
+User3 = "ID 3"
+key3 = #ID 3' key value
+
+UserList = {User1 : key1, User2 : key2 , User3 : key3}
+UserListStatus = {User1 : 0, User2 : 0 , User3 : 0}
+
+'''
+a = requests.get(lolurl)
+print(a.json())
+temp = a.json()
+print (temp)
+temp1 = temp[u'\uad6c\ub85c\uc9c0\ubc30\uc790']
+username = temp1[u'name']
+print(username)
+'''
+
+### 현재 게임 얻어오기
+def GetCurrentGame(UserKey) :   
+    #   대문자 주의
+    lolurl =   'https://kr.api.pvp.net/observer-mode/rest/consumer/getSpectatorGameInfo/KR/' + UserKey + '?api_key=' + apikey
+    #print(lolurl)
+    try :
+        a = requests.get(lolurl,timeout=5)       
+    except ConnectionError as e:
+          print e
+          a = "No response"
+    except requests.exceptions.RequestException as e:
+        print ("Error in Request 1 :")
+        print e
+
+    #print(a) 
+
+    # 게임중 200
+    # 게임중이 아닐때 404
+    IsGaming = 0
+    IsRankGame = 0
+    gameid = "0"
+    h = 0
+    m = 0
+
+    if(a == "No response") :
+        return 0, 0, 0, 0
+
+    if a.status_code == 200 :
+        #print("=========== 게임중 ==============")
+        IsGaming = 1
+        #print(a.json())
+        gameid = str(a.json()[u'gameId'])
+        user_start_time = a.json()['gameStartTime']
+        user_game_type = a.json()['gameType']       
+        if user_game_type == "MATCHED_GAME" :
+            IsRankGame = True
+        else :
+            IsRankGame = False           
+
+
+        change_time = datetime.fromtimestamp(int(user_start_time) / 1e3)
+        h = change_time.hour
+        m = change_time.minute     
+        #print(gameid)
+
+    else :
+        #print("=========== 노게임중 ==============")
+        IsGaming = 0
+
+    return IsGaming ,IsRankGame, gameid, h, m
+
+#########################################
+RecordURL = 'http://www.op.gg/summoner/ajax/requestRecording.json/gameId='
+StrMsgtoSend = ""
+gameid = ""
+ResultRequest = requests.models.Response
+while True:
+    for UserName, UserKey in UserList.iteritems() :
+        #print("루프 시작" + UserName + "\n")
+        StrMsgtoSend = ""
+
+        IsGaming ,IsRankGame, gameid, h, m = GetCurrentGame(UserKey)
+        if IsGaming == 1 :
+            print("게임중" + UserName)
+            if IsRankGame == True :
+                print("랭크\n")
+
+            print("게임중인지 : " + str(UserListStatus[UserName]))
+            if UserListStatus[UserName] == 1 :
+                for LoopCnt in range(0,5) :
+                    try :
+                        ResultRequest = requests.get(RecordURL + gameid )
+                    except ConnectionError as e:
+                        print e
+                        ResultRequest = "No response"
+                        continue
+                        sleep(5)
+                continue
+
+            elif UserListStatus[UserName] == 0 :
+                UserListStatus[UserName] = 1
+
+            StrMsgtoSend = "게임중!"           
+            for LoopCnt in range(0,10) :           
+                try :
+                    ResultRequest = requests.get(RecordURL + gameid )
+                except ConnectionError as e:
+                    print e
+                    ResultRequest = "No response"
+                    continue
+                except requests.exceptions.RequestException as e :
+                    print ("Error in Request 2 :")
+                    print e
+                    continue
+
+                if(ResultRequest == "No response") :
+                    Sleep(5)
+                    continue
+
+                if ResultRequest.status_code == 200 :
+                    if StrMsgtoSend == "" :                     
+                       StrMsgtoSend = StrMsgtoSend + " 녹화 성공!!"
+                       print("녹화 성공 게임중\n");
+                       if IsRankGame == True :
+                           StrMsgtoSend = StrMsgtoSend + "(랭크)"
+                           print("랭크게임 \n");
+
+                   # 일단 무조건 녹화를 위해 10번 강제로 돌림
+                    #break
+
+                sleep(5)
+
+            StrMsgtoSend = StrMsgtoSend + "\n" + "(" + str(h) + ':' + str(m) + '에 게임시작함)'
+
+            # 따뎅과 동부산만
+            if UserName == User3 or UserName == User4:             
+                bot.sendMessage(chat_id=chat_id, text="[" + UserName + "] " +  StrMsgtoSend)
+
+        else :
+            StrMsgtoSend = "안게임중"
+            UserListStatus[UserName] = 0
+
+        #sleep(2)       
+        sleep(20)       
